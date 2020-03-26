@@ -1,0 +1,16 @@
+{
+    "name": "bitbar-plugin-teamgrid",
+    "version": "0.0.2",
+    "description": "BitBar Plugin for Teamgrid Time-Tracking",
+    "author": "Christian Seel (https://seda.digital)",
+    "license": "MIT",
+    "repository": "github:SEDAdigital/bitbar-plugin-teamgrid",
+    "bugs": "https://github.com/SEDAdigital/bitbar-plugin-teamgrid/issues",
+    "dependencies": {
+        "dayjs": "^1.8.23",
+        "jquery": "^3.4.1",
+        "request": "^2.88.2",
+        "request-promise": "^4.2.5",
+        "request-promise-native": "^1.0.8"
+    }
+}

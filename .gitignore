@@ -1,0 +1,20 @@
+# ignore various IDE files and folders
+.idea
+.gitlab
+.storage
+
+.buildpath
+.project
+.settings/
+nbproject/
+web.config
+
+# ignore mac files
+.DS_Store
+
+# ignore npm debug reports
+npm-debug.log
+
+# Project specific
+node_modules
+config.js

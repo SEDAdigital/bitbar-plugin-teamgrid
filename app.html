@@ -1,0 +1,362 @@
+<!doctype html>
+<html lang="de">
+<!--
+    BitBar: https://github.com/matryer/bitbar
+    boierplate: https://gist.github.com/muhqu/8891318
+    bitbar MR for HTML plugin: https://github.com/matryer/bitbar/pull/4/
+    Teamgrid API: https://developer.teamgridapp.com/reference
+-->
+
+<head>
+    <meta charset="utf-8">
+    <style type="text/css">
+        body {
+            --background-color: #fff;
+            --text-color: #222;
+        }
+        @media (prefers-color-scheme: dark) {
+            body {
+                --background-color: #000;
+                --text-color: #fff;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            white-space: nowrap;
+            font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Oxygen-Sans,Ubuntu,Cantarell,"Helvetica Neue",sans-serif;
+            font-size: 10.5pt;
+            line-height: 22px;
+            background: var(--background-color);
+            color: var(--text-color);
+        }
+
+        .timer {
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
+        }
+
+        svg {
+            fill: var(--text-color);
+            display: inline-block;
+            width: 28px;
+            height: 16px;
+            position: relative;
+            top: 3px;
+        }
+
+        #app {
+            display: inline-block;
+            width: auto;
+        }
+        #app.clicked {
+            background: gray;
+        }
+        #app.active {
+            background: #0549ff;
+        }
+        #app.error {
+            background: red;
+        }
+
+        div {
+            display: inline-block;
+        }
+        
+        #stopTimer {
+            width: 16px;
+            position: relative;
+            top: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        &nbsp;<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 116 74">
+            <g fill-rule="nonzero">
+                <path d="M53.822 59.575L40.337 73.231V0l13.485 13.656zM32.971 57.527L19.485 69.134V4.097l13.486 11.608zM12.12 52.064L0 61.623V13.656l12.12 7.511zM61.188 59.575l13.485 13.656V0L61.188 13.656zM82.039 57.527l13.485 11.607V4.097L82.039 15.705zM102.89 52.064l12.12 9.559V13.656l-12.12 7.511z"/>
+            </g>
+        </svg>
+        <div id="content">Lade Informationen <span id="loader">...</span></div>&nbsp;
+    </div>
+    <script type="text/javascript" src="teamgrid/node_modules/jquery/dist/jquery.min.js"></script>
+    <script type="text/javascript" src="teamgrid/node_modules/dayjs/dayjs.min.js"></script>
+    <script type="text/javascript" src="teamgrid/node_modules/dayjs/locale/de.js"></script>
+    <script type="text/javascript" src="teamgrid/config.js"></script>
+    <script>
+        let $content = false;
+        let currentTask = null;
+        let lastRefresh = null;
+        let errorMsg = null;
+        let taskList = null;
+
+        dayjs.locale('de');
+
+        jQuery(function ($) {
+            if (typeof BitBar !== 'object') {
+                BitBar = {
+                    resetMenu: function(object) {
+                        console.log('resetMenu');
+                    },
+                    addMenuItem: function(object) {
+                        console.log('addMenuItem', object);
+                    },
+                    addMenuSeperatorItem: function(object) {
+                        console.log('addMenuSeperatorItem', '---');
+                    },
+                    showMenu: function(object) {
+                        console.log('showMenu');
+                    },
+                    resizeToFit: function(object) {
+                        console.log('resizeToFit');
+                    }
+                };
+            } else {
+                window.console.log = function(...args){
+                    window.BitBar.log(args.join(', '));
+                };
+                window.console.error = function(...args){
+                    window.BitBar.log(args.join(', '));
+                };
+            }
+
+            $content = $('#content');
+            //BitBar.showWebInspector(); // does not work =(
+
+            /*
+            // Stop Button clicked (in menu bar, not dropdown)
+            $('#app').on('click', '#stopTimer', function(e) {
+                e.preventDefault();
+                console.log('should stop timer');
+                stopTimer();
+                return false;
+            });*/
+
+            // click on menu bar
+            $('#app').on('click', function(e) {
+                console.log('app clicked');
+                if (typeof BitBar !== 'object') {
+                    $('#app').addClass('error');
+                    return false;
+                }
+                $('#app').addClass('clicked');
+                BitBar.resetMenu();
+
+                if (currentTask) {
+                    BitBar.addMenuItem({
+                        title: "Timer stoppen",
+                        bash: config.node_path,
+                        param1: config.bitbar_plugins_path + '/teamgrid/stoptimer.js',
+                        refresh: 'true',
+                        terminal: 'false'
+                    });
+                    BitBar.addMenuItem({
+                        title: "Aktiven Task öffnen",
+                        href: config.teamgrid_web_url + 'tasks/?task='+currentTask.taskId
+                    });
+                    BitBar.addMenuSeperatorItem();
+                }
+
+                if (taskList) {
+                    BitBar.addMenuItem({
+                        title: 'Timer starten für…'
+                    });
+                    let addedTasks = [];
+                    taskList.forEach(task => {
+                        if (addedTasks.length >= 8) {
+                            return;
+                        }
+                        if (addedTasks.includes(task.taskId)) {
+                            return;
+                        }
+                        if (task.type === 'call') {
+                            return;
+                        }
+                        BitBar.addMenuItem({
+                            title: truncate(task.taskName, 35, true, true) + ' (' + truncate(task.contactName, 15, true, false) + ')',
+                            bash: config.node_path,
+                            param1: config.bitbar_plugins_path + '/teamgrid/starttimer.js',
+                            param2: task.taskId,
+                            refresh: 'true',
+                            terminal: 'false'
+                        });
+                        addedTasks.push(task.taskId);
+                    })
+                    
+                    BitBar.addMenuSeperatorItem();
+                }
+
+                BitBar.addMenuItem({ title: "Task-Übersicht öffnen", href: config.teamgrid_web_url + 'tasks/' });
+
+                if (errorMsg) {
+                    BitBar.addMenuSeperatorItem();
+                    BitBar.addMenuItem({
+                        title: errorMsg
+                    });
+                }
+
+                if (lastRefresh) {
+                    BitBar.addMenuSeperatorItem();
+                    BitBar.addMenuItem({
+                        title: 'Aktualisiert vor ' + dayjs().subtract(lastRefresh).format('s') + ' Sekunden'
+                    });
+                }
+
+                BitBar.showMenu();
+            });
+
+            // Initial data loading:
+            // - immediately (to show data asap)
+            // - 3s later in case a timer was just stopped before the reload
+            // - every 10s for updates
+            updateCurrentTask();
+            setTimeout(function(){
+                updateCurrentTask();
+                setInterval(updateCurrentTask, 5 * 1000);
+            }, 3000);
+        });
+
+        /*
+        let stopTimer = function() {
+            request({
+                method: 'POST',
+                url: 'https://api.teamgridapp.com/tasks/' + currentTask.taskId + '/stopTracking',
+                data: {
+                    time: dayjs().format()
+                },
+                dataType: 'json'
+            }).then(function(){
+                updateCurrentTask();
+            }).catch(function(e) {
+                console.error('Could not stop timer', e);
+            });
+        };
+        */
+
+        let renderTick = false;
+        let renderTask = function(task) {
+            if (renderTick) {
+                clearTimeout(renderTick);
+            }
+            if (task === null) {
+                return;
+            }
+
+            $('#app').addClass('active');
+            let startDateTime = dayjs(task.start);
+            let diff = dayjs().subtract(startDateTime).subtract(1, 'hour');
+            let time = ' [<span class="timer">'+ diff.format('HH:mm:ss') +'</span>]';
+
+            let name = truncate(task.taskName, 35, true, true);
+            let client = truncate(task.contactName, 15, true, false);
+            $content.html(name + time + ' (' + client  + ')'); // <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" id="stopTimer"><path style="marker:none" d="M50 8C26.80404 8 8 26.80404 8 50s18.80404 42 42 42 42-18.80404 42-42S73.19596 8 50 8zM32 32h36v36H32V32z" overflow="visible"/></svg>');
+
+            renderTick = setTimeout(function(){
+                renderTick = false;
+                renderTask(task);
+            }, 1000);
+        };
+
+        function truncate(string, n, useWordBoundary, useDots){
+            if (string.length <= n) { return string; }
+            var subString = string.substr(0, n-1);
+            return (useWordBoundary 
+            ? subString.substr(0, subString.lastIndexOf(' ')) 
+            : subString) + (useDots ? "…" : '');
+        };
+
+        let updateCurrentTask = function() {
+            getCurrentTask().then(function(task){
+                lastRefresh = dayjs();
+                console.log('got new task data');
+                if (task.end === null) {
+                    currentTask = task;
+                    renderTask(task);
+                    resizeBitBar();
+                } else {
+                    resetContent('Nicht aktiv');
+                }
+                errorMsg = null;
+
+            }).catch(function(e){
+                resetContent(e);
+                errorMsg = e;
+                console.error(e);
+            });
+        }
+
+        let resetContent = function(text){
+            currentTask = null;
+            if (renderTick) {
+                clearTimeout(renderTick);
+            }
+            $('#app').removeClass('active');
+            $content.text(text);
+
+            resizeBitBar();
+        }
+
+        let resizeBitBar = function() {
+            try {
+                if (typeof BitBar === 'object' && typeof BitBar.resizeToFit === 'function') {
+                    BitBar.resizeToFit();
+                    //console.log('resizing...');
+                } else {
+                    console.log('Could not resize to fit');
+                }
+            } catch (e) {
+                console.log(e);
+            }
+        };
+
+        let getCurrentTask = function() {
+            return new Promise((resolve, reject) => {
+                let promise = request({
+                    method: 'GET',
+                    url: 'https://api.teamgridapp.com/times',
+                    data: {
+                        limit: '60',
+                        userId: config.teamgrid_userid
+                    },
+                    dataType: 'json'
+                });
+
+                promise.then(function(response){
+                    if (response.data && response.data.length > 0) {
+                        taskList = response.data;
+                        let task = response.data[0];
+                        resolve(task);
+                    } else {
+                        reject('Did not receive times/tasks from API');
+                    }
+                });
+
+                promise.catch(function(e) {
+                    reject(e);
+                });
+            });
+        }
+
+        let request = function (options) {
+            return new Promise((resolve, reject) => {
+                options.success = function (data, textStatus, jqXHR) {
+                    resolve(data);
+                };
+                options.error = function (jqXHR, textStatus, errorThrown) {
+                    reject(textStatus);
+                }
+                if (typeof options.headers !== 'object') {
+                    options.headers = {};
+                }
+                options.headers["Authorization"] = 'Bearer ' + config.teamgrid_token;
+                $.ajax(options);
+            });
+        };
+    </script>
+</body>
+
+</html>
