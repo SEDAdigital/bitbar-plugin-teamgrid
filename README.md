@@ -3,6 +3,8 @@
 This is a BitBar plugin that adds a menu bar to your mac with your current
 active time tracker from [Teamgrid](https://teamgridapp.com).
 
+![Example Screenshot](screenshot.png)
+
 ## Features
 - shows current active tasks in menubar including the client and a counter
 - stop current timer via dropdown
